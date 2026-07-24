@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+.env.local
+
+# Knowledge base data
+knowledge_base/qdrant_data/
+knowledge_base/qdrant_data_test_copy/
+
+# GraphRAG output
+graphrag/output/
+graphrag/input/*.md
+graphrag/update_output/
+
+# IDE
+.vscode/
+.idea/
