@@ -13,7 +13,12 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from rag_kb.tools import get_retriever, mcp
+from rag_kb.tools import (
+    RETRIEVER_NOT_READY,
+    RetrieverNotReadyError,
+    get_retriever,
+    mcp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +85,10 @@ def zgh_search_docs(query: str, top_k: int = 5) -> str:
         and relevance score.
     """
     top_k = min(top_k, 20)
-    retriever = get_retriever()
+    try:
+        retriever = get_retriever()
+    except RetrieverNotReadyError:
+        return RETRIEVER_NOT_READY
     return retriever.search(query, top_k=top_k)
 
 
@@ -140,5 +148,8 @@ def zgh_list_docs() -> str:
     Returns:
         Formatted list of indexed documents.
     """
-    retriever = get_retriever()
+    try:
+        retriever = get_retriever()
+    except RetrieverNotReadyError:
+        return RETRIEVER_NOT_READY
     return retriever.list_sources()

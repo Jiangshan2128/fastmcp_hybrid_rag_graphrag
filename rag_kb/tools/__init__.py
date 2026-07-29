@@ -15,6 +15,7 @@ register everything.
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, AsyncIterator
 
@@ -27,14 +28,21 @@ logger = logging.getLogger(__name__)
 
 # ── Central FastMCP instance ─────────────────────────────────────────
 # Tool modules import this and decorate via @mcp.tool.
-# The lifespan ensures the retriever is initialized *before* any tool
-# call arrives — no lazy-init delay on first use.
+# The lifespan starts background initialization and yields immediately;
+# the first tool call will check readiness and return a friendly message
+# if the retriever isn't ready yet.
 
 
 @asynccontextmanager
 async def _lifespan(server: FastMCP) -> AsyncIterator[None]:
-    """FastMCP lifespan: pre-warm retriever on startup, clean up on shutdown."""
-    _init_retriever()
+    """FastMCP lifespan: start background init, don't block server startup.
+
+    Initialization (creating embeddings, loading vector store, indexing
+    documents) runs in a daemon thread.  Tool calls check a ready flag
+    and return a "still initializing" message if indexing hasn't finished
+    yet — the server stays responsive to the MCP host immediately.
+    """
+    _start_background_init()
     yield
     reset_retriever()
 
@@ -70,16 +78,117 @@ mcp = FastMCP(
     ),
 )
 
-# ── Shared retriever singleton ───────────────────────────────────────
+# ── Shared retriever singleton with background initialisation ─────────
+# Lifecycle:
+#   lifespan → _start_background_init() → thread runs initialize()
+#                                            ↓ success    ↓ failure
+#                                     set _retriever    set _retriever_init_error
+#   get_retriever() → check ready flag → ready → return
+#                                     → not ready → raise RetrieverNotReadyError
+#
+# Each tool function catches RetrieverNotReadyError and returns a
+# friendly "still initializing, please retry" message instead of
+# blocking the MCP request.
+
 _retriever: RAGRetriever | None = None
+_retriever_init_event: threading.Event | None = None
+_retriever_init_error: Exception | None = None
 
 
-def _init_retriever() -> None:
-    """Initialize the retriever and index documents (called once via lifespan).
+RETRIEVER_NOT_READY = "【知识库正在初始化】后台索引文档中，请稍候重试。"
 
-    Separated from ``get_retriever()`` so the lifespan can call it eagerly
-    on startup, while tools still get the same singleton on demand.
+
+class RetrieverNotReadyError(RuntimeError):
+    """Raised by ``get_retriever()`` when background init hasn't completed yet.
+
+    Tool functions catch this and return a user-friendly retry message
+    instead of blocking the MCP request handler.
     """
+
+
+def _background_init_worker() -> None:
+    """Background thread: run retriever initialisation (embeddings, store, index).
+
+    Only sets ``_retriever`` on success.  On failure, stores the exception
+    so ``get_retriever()`` can re-raise it to the caller.
+    """
+    global _retriever, _retriever_init_error
+    try:
+        from rag_kb.config import get_rag_config
+        from rag_kb.retriever import RAGRetriever
+
+        logger.info(
+            "Background init: initializing RAGRetriever and indexing documents..."
+        )
+        config = get_rag_config()
+        retriever = RAGRetriever(config)
+        result = retriever.initialize()
+        _retriever = retriever
+        logger.info("Background init complete: %s", result.summary)
+    except Exception as e:
+        _retriever_init_error = e
+        logger.error("Background init failed (first tool call will raise): %s", e)
+    finally:
+        if _retriever_init_event is not None:
+            _retriever_init_event.set()
+
+
+def _start_background_init() -> None:
+    """Start retriever initialisation in a daemon thread.
+
+    Called once from the lifespan.  Idempotent — subsequent calls are no-ops.
+    """
+    global _retriever_init_event
+    if _retriever is not None:
+        return
+    if _retriever_init_event is not None:
+        return  # already started
+
+    _retriever_init_event = threading.Event()
+    thread = threading.Thread(target=_background_init_worker, daemon=True)
+    thread.start()
+    logger.debug("Background init thread started")
+
+
+def get_retriever() -> RAGRetriever:
+    """Return the singleton retriever if ready, or raise ``RetrieverNotReadyError``.
+
+    NEVER blocks — returns instantly.  Tool functions catch the error and
+    respond with a friendly retry message.
+    """
+    global _retriever
+
+    # Fast path — already initialised.
+    if _retriever is not None:
+        return _retriever
+
+    # Background init was started — check if it's done.
+    event = _retriever_init_event
+    if event is not None:
+        if event.is_set():
+            # Event fired — init completed (success or failure).
+            if _retriever_init_error:
+                raise RuntimeError(
+                    f"Initialisation failed: {_retriever_init_error}"
+                ) from _retriever_init_error
+            if _retriever is None:
+                raise RuntimeError("Initialisation completed but retriever is None")
+            return _retriever
+
+        # Init is still running — don't block.
+        raise RetrieverNotReadyError(
+            "Knowledge base is still initialising. "
+            "Indexing documents in the background — "
+            "please wait a moment and try again."
+        )
+
+    # No background init was started (e.g. tests) — do it synchronously.
+    _init_retriever_sync()
+    return _retriever
+
+
+def _init_retriever_sync() -> None:
+    """Synchronous initialisation fallback for when lifespan never ran."""
     global _retriever
     if _retriever is not None:
         return
@@ -87,30 +196,20 @@ def _init_retriever() -> None:
     from rag_kb.config import get_rag_config
     from rag_kb.retriever import RAGRetriever
 
-    logger.info("Startup: initializing RAGRetriever and indexing documents...")
+    logger.info("Sync init: initializing RAGRetriever...")
     config = get_rag_config()
-    _retriever = RAGRetriever(config)
-    result = _retriever.initialize()
-    logger.info("Startup indexing complete: %s", result.summary)
-
-
-def get_retriever() -> RAGRetriever:
-    """Return the singleton RAGRetriever.
-
-    By the time any tool function runs, the lifespan has already called
-    ``_init_retriever()`` — so this is always a fast no-op return.
-    """
-    global _retriever
-    if _retriever is None:
-        # Fallback: lifespan may not have run (e.g. in tests).
-        _init_retriever()
-    return _retriever
+    retriever = RAGRetriever(config)
+    result = retriever.initialize()
+    _retriever = retriever
+    logger.info("Sync init complete: %s", result.summary)
 
 
 def reset_retriever() -> None:
     """Reset the retriever singleton (for shutdown / testing)."""
-    global _retriever
+    global _retriever, _retriever_init_event, _retriever_init_error
     if _retriever is not None:
         _retriever.shutdown()
         _retriever = None
-        logger.info("Retriever shut down.")
+    _retriever_init_event = None
+    _retriever_init_error = None
+    logger.info("Retriever shut down.")

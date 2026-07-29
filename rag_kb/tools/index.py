@@ -10,7 +10,12 @@ from __future__ import annotations
 
 import logging
 
-from rag_kb.tools import get_retriever, mcp
+from rag_kb.tools import (
+    RETRIEVER_NOT_READY,
+    RetrieverNotReadyError,
+    get_retriever,
+    mcp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +36,10 @@ def zgh_refresh_index(full_rebuild: bool = False) -> str:
     Returns:
         Summary of what was indexed.
     """
-    retriever = get_retriever()
+    try:
+        retriever = get_retriever()
+    except RetrieverNotReadyError:
+        return RETRIEVER_NOT_READY
     result = retriever.refresh_index(full_rebuild=full_rebuild)
 
     msg = f"Index refreshed: {result.summary}"
@@ -54,7 +62,10 @@ def zgh_get_doc_stats() -> str:
     Returns:
         Formatted statistics about the document library.
     """
-    retriever = get_retriever()
+    try:
+        retriever = get_retriever()
+    except RetrieverNotReadyError:
+        return RETRIEVER_NOT_READY
     stats = retriever.get_doc_stats()
 
     lines = [
