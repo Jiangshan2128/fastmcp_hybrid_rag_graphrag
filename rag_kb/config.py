@@ -36,18 +36,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # MCP root (parent of rag_kb/)
 _MCP_ROOT = Path(__file__).resolve().parents[1]
-# Project root (for fallback to main project config)
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Load project .env
-_load_dotenv = load_dotenv(_PROJECT_ROOT / ".env")
+# Load MCP server .env (not the parent project's .env)
+_load_dotenv = load_dotenv(_MCP_ROOT / ".env")
 
 
 class RAGConfig(BaseSettings):
     """RAG knowledge base configuration loaded from environment / .env file."""
 
     model_config = SettingsConfigDict(
-        env_file=str(_PROJECT_ROOT / ".env"),
+        env_file=str(_MCP_ROOT / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -67,7 +65,7 @@ class RAGConfig(BaseSettings):
     # Qdrant local mode: stores data at this path (no server needed).
     # Use ":memory:" for non-persistent in-memory storage.
     QDRANT_PATH: str = str(
-        _PROJECT_ROOT / "knowledge_base" / "qdrant_data"
+        _MCP_ROOT / "knowledge_base" / "qdrant_data"
     )
     # Qdrant collection name
     QDRANT_COLLECTION: str = "ai_note_knowledge"
@@ -76,7 +74,7 @@ class RAGConfig(BaseSettings):
 
     # -- Documents ------------------------------------------------------
     DOCUMENTS_PATH: str = str(
-        _PROJECT_ROOT / "knowledge_base" / "documents"
+        _MCP_ROOT / "knowledge_base" / "documents"
     )
 
     # -- Indexing -------------------------------------------------------

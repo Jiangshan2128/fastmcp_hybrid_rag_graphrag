@@ -15,12 +15,12 @@ Register as a local MCP server in ``mcp_servers.json``::
 
     {
       "mcpServers": {
-        "rag-knowledge-base": {
+        "zhiguanhua-kb": {
           "enabled": true,
           "type": "stdio",
           "command": "python",
           "args": ["mcp/server.py"],
-          "description": "Local RAG knowledge base query service"
+          "description": "智冠华 Internal Knowledge Base — RAG + GraphRAG query service"
         }
       }
     }
@@ -28,13 +28,14 @@ Register as a local MCP server in ``mcp_servers.json``::
 Tools
 =====
 Search & Retrieval
-    search_docs       — Semantic search for relevant documentation
-    get_document      — Read a full document by path
-    list_docs         — List all indexed documents with summaries
+    zgh_search_docs       — Search product specs, parameters, SDK docs
+    zgh_get_document      — Read a full internal document by path
+    zgh_list_docs         — List all indexed internal documents
+    zgh_get_usage_guide   — Get usage guide (start here)
 
 Index Management
-    refresh_index     — Manually trigger a re-index of the docs directory
-    get_doc_stats     — View knowledge base statistics
+    zgh_refresh_index — Manually trigger a re-index of the docs directory
+    zgh_get_doc_stats — View knowledge base statistics
 
 Tool Modules
 ============
@@ -42,14 +43,14 @@ Tool Modules
 
     mcp/rag_kb/tools/
     ├── __init__.py     — mcp instance, retriever singleton, lifecycle hooks
-    ├── search.py       — search_docs, get_document, list_docs
-    └── index.py        — refresh_index, get_doc_stats
+    ├── search.py       — zgh_search_docs, zgh_get_document, zgh_list_docs
+    └── index.py        — zgh_refresh_index, zgh_get_doc_stats
 
 Design notes
 ============
 - Indexing happens automatically on server startup (``AUTO_INDEX_ON_START=true``).
 - Documents live in ``knowledge_base/documents/`` — just drop files there.
-- Use ``refresh_index`` to re-index after adding files (or enable WATCH_ENABLED).
+- Use ``zgh_refresh_index`` to re-index after adding files (or enable WATCH_ENABLED).
 - The vector store backend is swappable via ``VECTOR_STORE_BACKEND`` config.
 """
 
@@ -87,5 +88,5 @@ logger.info("Registered tool modules: search, index, graphrag")
 # =====================================================================
 
 if __name__ == "__main__":
-    logger.info("Starting AI-Note RAG Knowledge Base MCP server...")
+    logger.info("Starting 智冠华 Internal Knowledge Base MCP server...")
     mcp.run()

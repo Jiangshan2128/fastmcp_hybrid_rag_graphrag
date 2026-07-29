@@ -2,15 +2,17 @@
 
 Tools registered at import time via ``@mcp.tool``::
 
-    search_graph             — Graph-based retrieval (local or global mode)
-    get_graphrag_index_status — View knowledge graph statistics
+    zgh_search_graph              — Cross-document reasoning & knowledge graph retrieval
+    zgh_refresh_graphrag_index    — Rebuild the knowledge graph from indexed documents
+    zgh_get_graphrag_index_status — Check knowledge graph index readiness
 
-These complement the existing ``search_docs`` tool.  The Client LLM
-chooses which tool to call based on the description:
+These complement ``zgh_search_docs``. The caller should choose based on
+query type:
 
-- ``search_docs``: fast semantic search, best for concrete facts/parameters
-- ``search_graph``: graph-based search, best for global overviews,
-  cross-section relationships, and multi-hop reasoning
+- ``zgh_search_docs``: fast vector search, best for concrete specs/parameters
+  that can be extracted from a single passage
+- ``zgh_search_graph``: graph-based retrieval, best for cross-document
+  reasoning, global overviews, and multi-hop relationship queries
 """
 
 from __future__ import annotations
@@ -61,14 +63,15 @@ def _get_store():
 
 
 @mcp.tool
-async def search_graph(
+async def zgh_search_graph(
     query: str,
     mode: str = "local",
     community_level: int = 1,
 ) -> str:
-    """Deep graph-based knowledge retrieval for complex queries.
+    """Cross-document reasoning and knowledge graph retrieval for complex queries.
 
-    Uses GraphRAG's built-in search engine over the knowledge graph.
+    Uses the 智冠华 knowledge graph (GraphRAG) to answer queries that span
+    multiple documents or require reasoning beyond a single passage.
 
     Use **local** mode when the question involves specific entities,
     parameters, or technical details:
@@ -82,11 +85,11 @@ async def search_graph(
     - "涉及哪些技术领域"
     - "三个文档的共同主题是什么"
 
-    For simple fact/parameter lookups, use ``search_docs`` instead —
+    For simple fact/parameter lookups, use ``zgh_search_docs`` instead —
     it is faster and more cost-effective.
 
     Note: This tool requires the GraphRAG index to be built first.
-    If indexing has not been run, it will suggest using ``search_docs``.
+    If indexing has not been run, it will suggest using ``zgh_search_docs``.
 
     Args:
         query: Natural language query for graph-based retrieval.
@@ -110,18 +113,19 @@ async def search_graph(
 
 
 @mcp.tool
-async def refresh_graphrag_index(
+async def zgh_refresh_graphrag_index(
     method: str = "standard",
     incremental: bool = False,
     skip_preprocess: bool = True,
 ) -> str:
-    """Rebuild the GraphRAG knowledge graph index.
+    """Rebuild the 智冠华 knowledge graph from indexed documents.
 
-    Runs the full indexing pipeline: DOCX preprocessing → entity extraction
-    → graph construction → community detection → summaries.
+    Runs the full GraphRAG pipeline: entity extraction → graph construction
+    → community detection → summaries.
 
-    Use this after adding or updating documents in the knowledge base.
-    The index may take several minutes depending on document volume.
+    Call this after ``zgh_refresh_index`` when you also want to refresh
+    the knowledge graph. Indexing may take several minutes depending on
+    document volume.
 
     Args:
         method: Indexing method — ``"standard"`` (LLM-based, higher quality)
@@ -146,11 +150,11 @@ async def refresh_graphrag_index(
 
 
 @mcp.tool
-def get_graphrag_index_status() -> str:
-    """Check if the GraphRAG knowledge graph index is ready and get its path.
+def zgh_get_graphrag_index_status() -> str:
+    """Check whether the 智冠华 knowledge graph index is built and ready.
 
-    Returns the status (ready / not built), output directory, and
-    a hint on how to build or rebuild the index.
+    Returns readiness status, output directory, and entity/relationship/
+    community counts if built. If not ready, suggests building it.
 
     Returns:
         Status message with path info.
@@ -174,6 +178,6 @@ def get_graphrag_index_status() -> str:
         lines.append(f"  Documents:    {stats.document_count}")
     else:
         lines.append("")
-        lines.append("Call `refresh_graphrag_index` to build the index.")
+        lines.append("Call `zgh_refresh_graphrag_index` to build the index.")
 
     return "\n".join(lines)

@@ -1,7 +1,7 @@
 [project]
 name = "ainote-mcp-server"
 version = "0.1.0"
-description = "AI Note MCP Knowledge Base Server — RAG + GraphRAG"
+description = "智冠华 Internal Knowledge Base — RAG + GraphRAG MCP Server"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

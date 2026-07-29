@@ -2,8 +2,8 @@
 
 Tools registered at import time via ``@mcp.tool``:
 
-    refresh_index     — Manually trigger a re-index of the docs directory
-    get_doc_stats     — View knowledge base statistics
+    zgh_refresh_index  — Re-index internal documents after adding or updating files
+    zgh_get_doc_stats  — View document library statistics and index status
 """
 
 from __future__ import annotations
@@ -16,11 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 @mcp.tool
-def refresh_index(full_rebuild: bool = False) -> str:
-    """Re-index all documents from the documents directory.
+def zgh_refresh_index(full_rebuild: bool = False) -> str:
+    """Re-index all documents in the 智冠华 internal document library.
 
-    Normally, only new/changed files are re-indexed (using a content hash
-    cache).  Use ``full_rebuild=true`` to re-index every file from scratch.
+    Normally, only new or changed files are re-indexed (content-hash cache).
+    Use ``full_rebuild=true`` to rebuild every document from scratch.
+
+    Call this after dropping new DOCX or Markdown files into the documents
+    directory.
 
     Args:
         full_rebuild: If true, re-index everything (ignores cache).
@@ -40,14 +43,16 @@ def refresh_index(full_rebuild: bool = False) -> str:
 
 
 @mcp.tool
-def get_doc_stats() -> str:
-    """Get statistics about the knowledge base.
+def zgh_get_doc_stats() -> str:
+    """Get statistics about the 智冠华 internal document library.
 
-    Returns total indexed chunks, number of unique sources, backend type,
-    and configuration status.
+    Returns total indexed chunks, number of unique documents, vector store
+    backend, and whether auto-indexing and file watching are enabled.
+
+    Call this to verify what's available before searching.
 
     Returns:
-        Formatted statistics about the knowledge base.
+        Formatted statistics about the document library.
     """
     retriever = get_retriever()
     stats = retriever.get_doc_stats()

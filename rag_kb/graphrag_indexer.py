@@ -25,7 +25,12 @@ from pathlib import Path
 logger = logging.getLogger("rag_kb.graphrag_indexer")
 
 _GRAPHRAG_ROOT = Path(__file__).resolve().parent.parent / "graphrag"
-_DOCUMENTS_DIR = Path(__file__).resolve().parent.parent / "knowledge_base" / "documents"
+
+
+def _get_documents_dir() -> Path:
+    """Return the configured documents directory (from .env or default)."""
+    from rag_kb.config import RAGConfig
+    return Path(RAGConfig().DOCUMENTS_PATH)
 
 
 def preprocess() -> int:
@@ -58,13 +63,14 @@ def preprocess() -> int:
     config.CHUNK_OVERLAP = 200
 
     # ── 3. Find DOCX files ────────────────────────────────────────────
+    doc_dir = _get_documents_dir()
     docx_files = sorted(
-        f for f in _DOCUMENTS_DIR.glob("*.docx")
+        f for f in doc_dir.glob("*.docx")
         if not f.name.startswith(("~$", "~", "."))
     )
 
     if not docx_files:
-        logger.warning("No DOCX files found in %s", _DOCUMENTS_DIR)
+        logger.warning("No DOCX files found in %s", doc_dir)
         return 0
 
     logger.info("Preprocessing %d DOCX file(s) ...", len(docx_files))

@@ -152,7 +152,7 @@ class GraphRagStore:
                 "[GraphRAG 索引未就绪] 知识图谱尚未构建。\n\n"
                 "请先运行以下命令构建索引：\n"
                 f"  graphrag index --root {self._root_dir}\n\n"
-                "在此之前，建议使用 search_docs 进行向量检索。"
+                "在此之前，建议使用 zgh_search_docs 进行向量检索。"
             )
 
         try:
@@ -195,7 +195,7 @@ class GraphRagStore:
             logger.error("GraphRAG %s search failed: %s", mode, e, exc_info=True)
             return (
                 f"[GraphRAG {mode} 查询失败] {e}\n\n"
-                "建议改用 search_docs 进行向量检索。"
+                "建议改用 zgh_search_docs 进行向量检索。"
             )
 
     @staticmethod
