@@ -35,7 +35,7 @@ This project is designed as **a learn-by-building RAG implementation**. Each com
 - **`rag_kb/embeddings.py`** — See how different embedding providers are abstracted behind a common interface
 - **`rag_kb/qdrant_store.py`** — Trace through a complete hybrid search implementation (dense → sparse → RRF fusion)
 - **`rag_kb/retriever.py`** — Understand the full RAG lifecycle: index → search → format
-- **`rag_kb/graphrag_store.py`** — Explore how knowledge graphs enhance retrieval beyond vector similarity
+- **`rag_kb/graphrag_search.py`** — Explore how knowledge graphs enhance retrieval beyond vector similarity
 - **`rag_kb/tools/`** — Learn how MCP tools are defined with FastMCP decorators
 
 Whether you're new to RAG or looking for a reference project with **real production patterns** (vector store interface abstraction, hybrid search, content-hash caching, structure-aware chunking), this is a solid starting point.
@@ -196,6 +196,28 @@ All configuration is via environment variables in `.env`:
 | `QDRANT_COLLECTION` | Collection name | `ai_note_knowledge` |
 | `QDRANT_DISTANCE` | Distance metric | `cosine` |
 
+### GraphRAG
+
+GraphRAG requires a separate set of environment variables (also set in `.env`):
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DEEPSEEK_API_KEY` | LLM API key for entity extraction & search | — |
+| `DEEPSEEK_BASE_URL` | LLM API base URL | `https://api.deepseek.com` |
+| `DOUBAO_API_KEY` | (Optional) LLM key for community reports | — |
+| `DOUBAO_BASE_URL` | (Optional) Base URL for community reports LLM | — |
+| `DOUBAO_MODEL` | (Optional) Model for community reports | `doubao-seed-2-1-turbo-260628` |
+| `DASHSCOPE_API_KEY` | Embedding API key (text-embedding-v4) | — |
+| `DASHSCOPE_BASE_URL` | Embedding API base URL | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+
+GraphRAG uses its own `graphrag/settings.yaml` for fine-grained pipeline configuration:
+- **LLM models** — two completion models: `default_completion_model` (entity extraction, summarization, search) and `doubao_model` (community reports with higher token limits)
+- **Entity types** — customized for technical documents: `device`, `specification`, `parameter`, `interface`, `component`, etc.
+- **Chunking** — set to 1200 tokens; preprocessing already splits documents into chunks, so this acts as a safety cap
+- **Vector store** — uses **LanceDB** (not Qdrant) for entity embedding storage during indexing
+
+> 💡 **Tip**: The `graphrag/settings.yaml` uses `${ENV_VAR}` syntax to inject values from your `.env` file — no need to edit credentials in YAML directly.
+
 ### Document Processing
 
 | Variable | Description | Default |
@@ -226,6 +248,108 @@ All configuration is via environment variables in `.env`:
 | `zgh_refresh_graphrag_index` | Rebuild GraphRAG knowledge graph |
 | `zgh_get_graphrag_index_status` | Check GraphRAG index readiness |
 
+## 🕸️ GraphRAG Indexing
+
+Building a GraphRAG knowledge graph is a two-step process. The project provides both an **MCP tool** and a **Python one-liner** to do it.
+
+### Indexing Pipeline Overview
+
+```
+knowledge_base/documents/
+  │ 设备SDK接口需求文档.v1.3.docx
+  │ A818产品规格说明.docx
+  ▼
+┌─────────────────────────────────────┐
+│  1. Preprocess (graphrag_indexer)    │   ← Same pipeline as RAG:
+│     DOCX → Markdown → chunking       │      Pandoc → header-split
+│     → input/*.md (one per chunk)     │      → numbered-item-split
+└──────────────┬──────────────────────┘
+               ▼
+┌─────────────────────────────────────┐
+│  2. GraphRAG Build (Microsoft SDK)   │   ← LLM-based (DeepSeek):
+│     ├─ Entity Extraction             │      entities, relationships,
+│     ├─ Graph Construction            │      communities, summaries
+│     ├─ Community Detection           │
+│     └─ Community Summarization       │
+└──────────────┬──────────────────────┘
+               ▼
+┌─────────────────────────────────────┐
+│  graphrag/output/                    │   ← Parquet files
+│  ├─ entities.parquet                 │      loaded at query time
+│  ├─ relationships.parquet            │      by GraphRagStore
+│  ├─ communities.parquet              │
+│  └─ community_reports.parquet        │
+└─────────────────────────────────────┘
+```
+
+### Method A: Via MCP Tool (recommended)
+
+After starting the server (`python server.py`), call the GraphRAG index tool:
+
+```python
+# From any MCP client
+zgh_refresh_graphrag_index(method="standard")
+```
+
+- `method="standard"` — LLM-based extraction (higher quality, takes longer)
+- `method="nlp"` — Rule-based extraction (faster, good for initial experimentation)
+- `incremental=true` — Only process new/changed documents
+
+Check status at any time:
+
+```python
+zgh_get_graphrag_index_status()
+```
+
+### Method B: Official GraphRAG CLI (build only)
+
+If input files are already preprocessed in `graphrag/input/`, run the official CLI directly:
+
+```bash
+# From the project root
+graphrag index --root graphrag
+```
+
+Or with verbose logging:
+
+```bash
+graphrag index --root graphrag --verbose
+```
+
+For incremental updates:
+
+```bash
+graphrag update --root graphrag
+```
+
+> 💡 **When to use which**: Method B runs both preprocess + build in one shot. Use Method C when you only want to re-run the GraphRAG pipeline without re-preprocessing (e.g., after tweaking `settings.yaml`).
+
+All three methods do the same thing:
+1. **Preprocess** — Convert DOCX files from `knowledge_base/documents/` into structured Markdown chunks under `graphrag/input/` (reuses the same Pandoc → header-split → numbered-item-split pipeline as the RAG indexer)
+2. **Build** — Run the full Microsoft GraphRAG pipeline: entity extraction → relationship inference → community detection → summarization
+3. **Output** — Write Parquet files to `graphrag/output/`
+
+### What Happens at Query Time
+
+Once the index is built, `zgh_search_graph`:
+
+1. **Loads** `entities.parquet`, `relationships.parquet`, `community_reports.parquet` etc. into memory (as Pandas DataFrames)
+2. **Calls** Microsoft GraphRAG's `local_search` or `global_search` API with the query
+3. **Retrieves** relevant entities via LanceDB vector search
+4. **Constructs** context from entity descriptions, relationships, and community summaries
+5. **Generates** a final answer using the configured LLM (DeepSeek)
+
+> ⚠️ **First-time indexing can take several minutes** depending on document volume and LLM response times. Subsequent incremental runs are faster.
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Index fails with `json_schema` error | The project includes `rag_kb/graphrag_patch.py` which monkey-patches GraphRAG's community report extractor to skip `strict: true` JSON schema mode (incompatible with DeepSeek) |
+| Empty search results | Run `zgh_get_graphrag_index_status()` first to verify the index is built |
+| Slow indexing | Use `method="nlp"` for faster but less accurate extraction, or reduce document count |
+| Out of memory | Reduce `CHUNK_SIZE` in `.env` or increase `max_gleanings: 0` in `settings.yaml` |
+
 ## 📁 Project Structure
 
 ```
@@ -245,8 +369,9 @@ ainote-mcp-server/
 │   ├── retriever.py          # Search orchestration
 │   ├── interfaces.py         # Abstract interfaces (VectorStoreInterface)
 │   ├── qdrant_store.py       # Qdrant backend with hybrid search + RRF
-│   ├── graphrag_store.py     # GraphRAG knowledge graph queries
+│   ├── graphrag_search.py    # GraphRAG knowledge graph queries
 │   ├── graphrag_indexer.py   # GraphRAG indexing pipeline
+│   ├── graphrag_patch.py     # Monkey-patch for non-OpenAI LLM compatibility
 │   ├── vector_store_factory.py  # Backend factory
 │   ├── watcher.py            # File system watcher
 │   └── tools/                # MCP tool definitions
@@ -259,9 +384,27 @@ ainote-mcp-server/
 │   ├── documents/            # Drop your .docx / .md files here
 │   └── qdrant_data/          # Qdrant persistent storage (auto-created)
 │
-└── graphrag/                 # GraphRAG project directory
-    ├── settings.yaml
-    └── output/               # GraphRAG parquet output (auto-created)
+├── graphrag/                 # GraphRAG project directory
+│   ├── settings.yaml         # Pipeline config (LLM, chunking, entity types)
+│   ├── prompts/              # Custom prompt templates for extraction & search
+│   │   ├── extract_graph.txt
+│   │   ├── summarize_descriptions.txt
+│   │   ├── community_report_graph.txt
+│   │   ├── community_report_text.txt
+│   │   ├── local_search_system_prompt.txt
+│   │   ├── global_search_map_system_prompt.txt
+│   │   └── ...
+│   ├── input/                # Preprocessed chunk files (auto-generated, gitignored)
+│   ├── output/               # Parquet output (auto-generated, gitignored)
+│   │   ├── entities.parquet
+│   │   ├── relationships.parquet
+│   │   ├── communities.parquet
+│   │   ├── community_reports.parquet
+│   │   └── ...
+│   ├── cache/                # LLM response cache (auto-generated, gitignored)
+│   └── logs/                 # Pipeline logs (auto-generated, gitignored)
+│
+└── helper/                   # Standalone utility scripts (document processing, evaluation)
 ```
 
 ## 💡 Learning Path
@@ -276,7 +419,7 @@ This project was built as a learning resource. Here's how to explore it:
 | 4️⃣ | `rag_kb/qdrant_store.py` | **Hybrid search**: dense + sparse vectors with RRF fusion |
 | 5️⃣ | `rag_kb/indexer.py`, `rag_kb/loader.py` | Document loading, chunking, content-hash caching |
 | 6️⃣ | `rag_kb/retriever.py` | End-to-end RAG lifecycle orchestration |
-| 7️⃣ | `rag_kb/graphrag_store.py` | Knowledge-graph-enhanced retrieval with GraphRAG |
+| 7️⃣ | `rag_kb/graphrag_search.py` | Knowledge-graph-enhanced retrieval with GraphRAG |
 | 8️⃣ | `rag_kb/vector_store_factory.py` | Factory pattern for swappable backends |
 
 ## 🐳 Docker

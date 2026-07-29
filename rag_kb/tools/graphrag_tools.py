@@ -42,7 +42,7 @@ def _get_store():
     """Get or create the GraphRagStore singleton."""
     global _graphrag_store
     if _graphrag_store is None:
-        from rag_kb.graphrag_store import GraphRagStore
+        from rag_kb.graphrag_search import GraphRagStore
 
         root = _get_graphrag_root()
         _graphrag_store = GraphRagStore(root)
