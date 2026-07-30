@@ -29,13 +29,19 @@ When ``EMBEDDING_API_KEY`` is unset, the config falls back to
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# MCP root (parent of rag_kb/)
-_MCP_ROOT = Path(__file__).resolve().parents[1]
+# Determine the project root:
+#   1. PyInstaller bundle → dir of server.exe (sys.executable)
+#   2. Development       → parent of rag_kb/ (__file__)
+if getattr(sys, "frozen", False):
+    _MCP_ROOT = Path(sys.executable).resolve().parent
+else:
+    _MCP_ROOT = Path(__file__).resolve().parents[1]
 
 # Load MCP server .env (not the parent project's .env)
 _load_dotenv = load_dotenv(_MCP_ROOT / ".env")

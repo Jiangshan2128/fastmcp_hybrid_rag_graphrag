@@ -284,13 +284,12 @@ def _normalize_list_hierarchy(markdown: str) -> str:
 
     return '\n'.join(result)
 
-    return '\n'.join(result)
 
 def _load_docx_via_pandoc(file_path: Path) -> list[Document]:
     """Convert a DOCX to clean Markdown via Pandoc subprocess."""
     result = subprocess.run(
         ["pandoc", str(file_path), "-t", "gfm", "--wrap=preserve"],
-        capture_output=True, text=True, check=True,
+        capture_output=True, encoding="utf-8", check=True,
     )
     markdown = result.stdout
 

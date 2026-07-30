@@ -9,6 +9,8 @@ __pycache__/
 .env.local
 .venv/
 .claude/
+build/
+dist/
 
 # Knowledge base data
 knowledge_base/qdrant_data/
