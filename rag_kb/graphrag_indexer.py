@@ -34,10 +34,10 @@ def _get_documents_dir() -> Path:
 
 
 def preprocess() -> int:
-    """Preprocess DOCX → Markdown → structure-aware chunks → input/.
+    """Preprocess DOCX & Markdown → structure-aware chunks → input/.
 
     Uses the same pipeline as the RAG knowledge base:
-    1. Pandoc → GFM Markdown (same cleaning/normalization as ``loader.py``)
+    1. Load via ``loader.py`` (DOCX → Pandoc → Markdown; ``.md`` → raw text)
     2. MarkdownHeaderTextSplitter (h1→h4)
     3. Numbered-item-aware splitter (``1)`` / ``2)`` boundaries)
     4. RecursiveCharacterTextSplitter (Chinese-aware separators)
@@ -62,40 +62,47 @@ def preprocess() -> int:
     config.CHUNK_SIZE = 1000
     config.CHUNK_OVERLAP = 200
 
-    # ── 3. Find DOCX files ────────────────────────────────────────────
+    # ── 3. Find DOCX & Markdown files ─────────────────────────────────
     doc_dir = _get_documents_dir()
-    docx_files = sorted(
-        f for f in doc_dir.glob("*.docx")
-        if not f.name.startswith(("~$", "~", "."))
+    source_files = sorted(
+        f for f in doc_dir.rglob("*")
+        if f.is_file()
+        and f.suffix.lower() in (".docx", ".md")
+        and not f.name.startswith(("~$", "~", "."))
     )
 
-    if not docx_files:
-        logger.warning("No DOCX files found in %s", doc_dir)
+    if not source_files:
+        logger.warning("No DOCX/Markdown files found in %s", doc_dir)
         return 0
 
-    logger.info("Preprocessing %d DOCX file(s) ...", len(docx_files))
+    docx_count = sum(1 for f in source_files if f.suffix.lower() == ".docx")
+    md_count = sum(1 for f in source_files if f.suffix.lower() == ".md")
+    logger.info(
+        "Preprocessing %d file(s) (%d DOCX, %d Markdown) ...",
+        len(source_files), docx_count, md_count,
+    )
     total_chunks = 0
 
-    for docx_path in docx_files:
+    for src_path in source_files:
         try:
-            # Load via Pandoc → Markdown (same as RAG)
-            docs = load_file(str(docx_path))
+            # Load via shared pipeline (DOCX → Pandoc → MD; .md → raw)
+            docs = load_file(str(src_path))
 
             # Split via RAG splitter (header → numbered-item → recursive)
             chunks = split_documents(docs, config)
 
             # Write each chunk as a separate .md file
             for i, chunk in enumerate(chunks):
-                safe_name = re.sub(r"[^\w一-鿿]", "_", docx_path.stem)[:40]
+                safe_name = re.sub(r"[^\w一-鿿]", "_", src_path.stem)[:40]
                 fname = f"{safe_name}_chunk_{i:04d}.md"
                 fpath = input_dir / fname
                 fpath.write_text(chunk.page_content, encoding="utf-8")
 
             total_chunks += len(chunks)
-            logger.info("  %s → %d chunks", docx_path.name, len(chunks))
+            logger.info("  %s → %d chunks", src_path.name, len(chunks))
 
         except Exception as e:
-            logger.error("  %s failed: %s", docx_path.name, e, exc_info=True)
+            logger.error("  %s failed: %s", src_path.name, e, exc_info=True)
 
     logger.info("Preprocess done: %d chunks → %s", total_chunks, input_dir)
     return total_chunks

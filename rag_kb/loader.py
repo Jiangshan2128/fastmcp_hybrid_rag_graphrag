@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Map file extensions to loader factories
 _LOADER_MAP: dict[str, str] = {
     ".txt": "text",
-    ".md": "text",
+    ".md": "markdown",
     ".py": "text",
     ".js": "text",
     ".ts": "text",
@@ -116,6 +116,8 @@ def _load_by_type(file_path: Path, loader_type: str) -> list[Document]:
     """Route to the appropriate loader based on type."""
     if loader_type == "text":
         return _load_text(file_path)
+    elif loader_type == "markdown":
+        return _load_markdown(file_path)
     elif loader_type == "csv":
         return _load_csv(file_path)
     elif loader_type == "pdf":
@@ -129,11 +131,25 @@ def _load_by_type(file_path: Path, loader_type: str) -> list[Document]:
 
 
 def _load_text(file_path: Path) -> list[Document]:
-    """Load a plain text (or Markdown) file."""
+    """Load a plain text file."""
     text = file_path.read_text(encoding="utf-8")
-    suffix = file_path.suffix.lower()
-    fmt = "markdown" if suffix == ".md" else "text"
-    return [Document(page_content=text, metadata={"source": str(file_path), "format": fmt})]
+    return [Document(page_content=text, metadata={"source": str(file_path), "format": "text"})]
+
+
+def _load_markdown(file_path: Path) -> list[Document]:
+    """Load a Markdown file with the same cleaning pipeline as DOCX→Markdown.
+
+    Reuses: TOC stripping, list hierarchy normalization, noise cleaning.
+    Skips: HTML table conversion, Pandoc-specific span/img stripping (native
+    Markdown doesn't produce those artifacts).
+    """
+    text = file_path.read_text(encoding="utf-8")
+
+    # Post-processing pipeline (shared with DOCX path)
+    text = _normalize_list_hierarchy(text)
+    text = _clean_markdown_noise(text)
+
+    return [Document(page_content=text, metadata={"source": str(file_path), "format": "markdown"})]
 
 
 def _load_csv(file_path: Path) -> list[Document]:
