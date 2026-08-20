@@ -1,87 +1,59 @@
-"""FastMCP server — exposes RAG knowledge base tools via MCP protocol.
+"""FastMCP server entry point — thin bootstrap.
+
+Pulls the shared ``mcp`` instance from the ``mcp_server`` package.
+Importing ``mcp_server`` registers all ``@mcp.tool`` handlers, so this
+file stays free of tool definitions.
 
 Start the server::
 
     # Via Python (stdio transport, default):
-    python mcp/server.py
+    python server.py
 
     # Via FastMCP CLI (stdio):
-    fastmcp run mcp/server.py:mcp
+    fastmcp run server.py:mcp
 
     # Via FastMCP CLI (HTTP on port 9000):
-    fastmcp run mcp/server.py:mcp --transport http --port 9000
+    fastmcp run server.py:mcp --transport http --port 9000
 
-Register as a local MCP server in ``mcp_servers.json``::
+Register as a local MCP server in ``.mcp.json``::
 
     {
       "mcpServers": {
         "zhiguanhua-kb": {
-          "enabled": true,
-          "type": "stdio",
-          "command": "python",
-          "args": ["mcp/server.py"],
-          "description": "智冠华 Internal Knowledge Base — RAG + GraphRAG query service"
+          "command": ".venv\\\\Scripts\\\\python.exe",
+          "args": ["-u", "server.py"]
         }
       }
     }
 
-Tools
-=====
-Search & Retrieval
-    zgh_search_docs       — Search product specs, parameters, SDK docs
-    zgh_get_document      — Read a full internal document by path
-    zgh_list_docs         — List all indexed internal documents
-    zgh_get_usage_guide   — Get usage guide (start here)
-
-Index Management
-    zgh_refresh_index — Manually trigger a re-index of the docs directory
-    zgh_get_doc_stats — View knowledge base statistics
-
-Tool Modules
-============
+Package layout
+==============
 .. code-block:: text
 
-    mcp/rag_kb/tools/
-    ├── __init__.py     — mcp instance, retriever singleton, lifecycle hooks
-    ├── search.py       — zgh_search_docs, zgh_get_document, zgh_list_docs
-    └── index.py        — zgh_refresh_index, zgh_get_doc_stats
-
-Design notes
-============
-- Indexing happens automatically on server startup (``AUTO_INDEX_ON_START=true``).
-- Documents live in ``knowledge_base/documents/`` — just drop files there.
-- Use ``zgh_refresh_index`` to re-index after adding files (or enable WATCH_ENABLED).
-- The vector store backend is swappable via ``VECTOR_STORE_BACKEND`` config.
+    mcp_server/                 — MCP application layer (sibling of rag_kb)
+    ├── __init__.py             — re-exports mcp, registers tool modules
+    ├── instance.py             — mcp = FastMCP(...) + lifespan
+    ├── runtime.py              — retriever singleton, background init
+    └── tools/                  — @mcp.tool handlers
+        ├── search.py           — zgh_search_docs, zgh_get_document, zgh_list_docs
+        ├── index.py            — zgh_refresh_index, zgh_get_doc_stats
+        └── graphrag_tools.py   — zgh_search_graph, ...
+    rag_kb/                     — pure RAG domain (no FastMCP imports)
 """
 
 from __future__ import annotations
 
 import logging
-import sys
-from pathlib import Path
 
-# Ensure the mcp/ directory is on sys.path so that ``rag_kb`` is importable
-# when running ``python mcp/server.py`` from the project root.
-_mcp_dir = str(Path(__file__).resolve().parent)
-if _mcp_dir not in sys.path:
-    sys.path.insert(0, _mcp_dir)
-
-# -- Logging -----------------------------------------------------------
+# ── Logging -----------------------------------------------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger("mcp.server")
+logger = logging.getLogger("server")
 
-# ── Import tool modules to register @mcp.tool decorators ─────────────
-# Order matters: __init__.py creates the mcp instance, then search.py
-# and index.py decorate it.  Lifecycle hooks live in __init__.py.
-from rag_kb.tools import mcp  # noqa: F401 — needed for fastmcp run
-from rag_kb.tools import search  # noqa: F401 — registers search tools
-from rag_kb.tools import index  # noqa: F401 — registers index tools
-from rag_kb.tools import graphrag_tools  # noqa: F401 — registers graphrag tools
-
-logger.info("Registered tool modules: search, index, graphrag")
+# Importing mcp_server registers all @mcp.tool handlers on the instance.
+from mcp_server import mcp  # noqa: F401 — registers tools on import
 
 # =====================================================================
 # Entry Point

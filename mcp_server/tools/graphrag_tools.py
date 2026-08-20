@@ -18,9 +18,10 @@ query type:
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 
-from rag_kb.tools import mcp
+from mcp_server.instance import mcp
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,13 @@ def _get_graphrag_root() -> str:
     """Return the absolute path to the graphrag project directory."""
     global _GRAPHRAG_ROOT
     if _GRAPHRAG_ROOT is None:
-        _mcp_dir = Path(__file__).resolve().parents[2]
-        _GRAPHRAG_ROOT = str(_mcp_dir / "graphrag")
+        # Mirror rag_kb/config.py: PyInstaller bundle → dir of server.exe,
+        # development → parent of this file (mcp_server/tools/ → project root).
+        if getattr(sys, "frozen", False):
+            root = Path(sys.executable).resolve().parent
+        else:
+            root = Path(__file__).resolve().parents[2]
+        _GRAPHRAG_ROOT = str(root / "graphrag")
     return _GRAPHRAG_ROOT
 
 

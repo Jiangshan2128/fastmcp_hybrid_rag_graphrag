@@ -41,15 +41,14 @@ graphrag update --root graphrag
 ### Two-tier RAG: Vector + Knowledge Graph
 
 ```
-Tool Layer (MCP)                          rag_kb/tools/
-  ├── zgh_search_docs        Hybrid vector search (dense + sparse)
-  ├── zgh_get_document       Full document reader
-  ├── zgh_list_docs          List indexed documents
-  ├── zgh_search_graph       GraphRAG knowledge graph search (local/global)
-  ├── zgh_refresh_index      Re-index documents
-  ├── zgh_get_doc_stats      Knowledge base statistics
-  ├── zgh_refresh_graphrag_index  Rebuild knowledge graph
-  └── zgh_get_graphrag_index_status  GraphRAG readiness check
+Tool Layer (MCP)                          mcp_server/  — MCP app layer (sibling of rag_kb)
+  ├── __init__.py           re-exports mcp, registers tool modules
+  ├── instance.py           mcp = FastMCP(...) + lifespan (non-blocking init)
+  ├── runtime.py            retriever singleton, background init
+  └── tools/
+      ├── search.py         zgh_search_docs, zgh_get_document, zgh_list_docs
+      ├── index.py          zgh_refresh_index, zgh_get_doc_stats
+      └── graphrag_tools.py zgh_search_graph, zgh_refresh_graphrag_index, ...
 
 RAG Layer                              rag_kb/
   ├── retriever.py          RAGRetriever — orchestrates embeddings + store + index
@@ -66,7 +65,7 @@ RAG Layer                              rag_kb/
   └── config.py             Pydantic-settings config from .env
 
 Config & data              root/
-  ├── server.py            FastMCP entry point — imports tool modules
+  ├── server.py            FastMCP entry point (thin bootstrap — from mcp_server import mcp)
   ├── .env                 API keys and settings (gitignored)
   ├── .mcp.json            Claude Code MCP server registration
   ├── knowledge_base/
@@ -99,7 +98,7 @@ Results are stripped of [Data: ...] citation markers before returning.
 
 ### Non-blocking server initialization
 
-**The server MUST NOT block lifespan yield** — MCP hosts (Inspector, Claude Code) have strict timeouts waiting for Initialize response. The `rag_kb/tools/__init__.py` lifecycle:
+**The server MUST NOT block lifespan yield** — MCP hosts (Inspector, Claude Code) have strict timeouts waiting for Initialize response. The `mcp_server/runtime.py` lifecycle (triggered by the lifespan in `mcp_server/instance.py`):
 
 1. Lifespan calls `_start_background_init()` — starts a daemon thread, yields immediately
 2. First tool call checks `threading.Event.is_set()` — if init not done, raises `RetrieverNotReadyError`
@@ -128,8 +127,8 @@ Results are stripped of [Data: ...] citation markers before returning.
 
 ## Quick Reference
 
-- Tools are named with `zgh_` prefix (智冠华), registered via `@mcp.tool` decorators in `rag_kb/tools/`
+- Tools are named with `zgh_` prefix (智冠华), registered via `@mcp.tool` decorators in `mcp_server/tools/`
 - All vector store backends must implement `VectorStoreInterface` in `rag_kb/interfaces.py`
 - New embedding providers go in `rag_kb/embeddings.py` — implement LangChain's `Embeddings` interface
 - GraphRagStore is **lazy-loaded**: parquet loaded on first `search_local()` / `search_global()` call, not at init
-- The `server.py` entry point imports tool modules for side-effect registration; order matters (`__init__.py` first for the `mcp` instance)
+- `mcp_server/__init__.py` imports the tool modules for side-effect registration; `server.py` is a thin entry that only pulls in `mcp`
