@@ -108,7 +108,9 @@ class QdrantStore(VectorStoreInterface):
             texts = [c.content for c in batch]
 
             if self._has_sparse:
-                dense_list, sparse_list = self._embeddings.embed_with_sparse(texts)
+                dense_list, sparse_list = self._embeddings.embed_with_sparse(
+                    texts, text_type="document",
+                )
             else:
                 dense_list = self._embeddings.embed_documents(texts)
                 sparse_list = None
@@ -221,9 +223,14 @@ class QdrantStore(VectorStoreInterface):
         3. Fuse the two ranked lists via RRF.
         4. Return the top *k* merged results.
         """
-        dense_vec = self._embeddings.embed_query(query)
-        sparse_dicts = self._embeddings.encode_sparse([query], text_type="query")
-        sparse_dict = sparse_dicts[0]
+        # Single API call returns both dense + sparse in one shot
+        # (text-embedding-v4 output_type="dense&sparse"), direction = query —
+        # same method the index path uses, just with text_type="query".
+        dense_list, sparse_list = self._embeddings.embed_with_sparse(
+            [query], text_type="query",
+        )
+        dense_vec = dense_list[0]
+        sparse_dict = sparse_list[0]
 
         prefetch_limit = max(20, min(_PREFETCH_CAP, k * _PREFETCH_MULTIPLIER))
 
