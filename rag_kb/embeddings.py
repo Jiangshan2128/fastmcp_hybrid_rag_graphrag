@@ -112,13 +112,20 @@ class QwenEmbeddings(Embeddings):
         return self._encode_sparse_only(texts, text_type=text_type)
 
     def embed_with_sparse(
-        self, texts: list[str],
+        self, texts: list[str], text_type: str = "document",
     ) -> tuple[list[list[float]], list[dict[int, float]]]:
         """Encode texts → **both** dense and sparse vectors in a single call.
 
         Uses ``output_type="dense&sparse"`` — same cost as single-vector mode.
+        Both index side (``text_type="document"``, default) and the query
+        path (``text_type="query"``) share this one method.
+
+        Args:
+            texts: Texts to encode.
+            text_type: ``"query"`` for search queries (directional),
+                ``"document"`` for indexed content (default).
         """
-        return self._encode_hybrid(texts, text_type="document")
+        return self._encode_hybrid(texts, text_type=text_type)
 
     # ── Internal ────────────────────────────────────────────────────
 
@@ -300,7 +307,11 @@ class BgeM3Embeddings(Embeddings):
         )
         return _to_list(output["dense_vecs"])[0]
 
-    def encode_sparse(self, texts: list[str]) -> list[dict[int, float]]:
+    def encode_sparse(
+        self, texts: list[str], text_type: str = "document",
+    ) -> list[dict[int, float]]:
+        # text_type accepted for interface parity with QwenEmbeddings;
+        # BGE-M3 is a local model and encodes query/document identically.
         output = self._m.encode(
             texts, batch_size=12, max_length=8192,
             return_dense=False, return_sparse=True,
@@ -308,8 +319,10 @@ class BgeM3Embeddings(Embeddings):
         return output["lexical_weights"]
 
     def embed_with_sparse(
-        self, texts: list[str],
+        self, texts: list[str], text_type: str = "document",
     ) -> tuple[list[list[float]], list[dict[int, float]]]:
+        # text_type accepted for interface parity with QwenEmbeddings;
+        # BGE-M3 is a local model and encodes query/document identically.
         output = self._m.encode(
             texts, batch_size=12, max_length=8192,
             return_dense=True, return_sparse=True,

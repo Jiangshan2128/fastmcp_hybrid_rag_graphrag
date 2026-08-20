@@ -1,6 +1,6 @@
 # DOCX 文档加载与分片流程
 
-> 适用版本：AI Note Backend — `mcp/rag_kb/`
+> 适用版本：AI Note Backend — `rag_kb/`
 >
 > 核心文件：`loader.py`, `splitter.py`
 

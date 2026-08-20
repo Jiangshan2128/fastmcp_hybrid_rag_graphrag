@@ -36,7 +36,7 @@ This project is designed as **a learn-by-building RAG implementation**. Each com
 - **`rag_kb/qdrant_store.py`** — Trace through a complete hybrid search implementation (dense → sparse → RRF fusion)
 - **`rag_kb/retriever.py`** — Understand the full RAG lifecycle: index → search → format
 - **`rag_kb/graphrag_search.py`** — Explore how knowledge graphs enhance retrieval beyond vector similarity
-- **`rag_kb/tools/`** — Learn how MCP tools are defined with FastMCP decorators
+- **`mcp_server/tools/`** — Learn how MCP tools are defined with FastMCP decorators
 
 Whether you're new to RAG or looking for a reference project with **real production patterns** (vector store interface abstraction, hybrid search, content-hash caching, structure-aware chunking), this is a solid starting point.
 
@@ -49,7 +49,7 @@ Whether you're new to RAG or looking for a reference project with **real product
 └──────────────────────┬───────────────────────────┘
                        │ MCP Protocol (stdio/HTTP)
 ┌──────────────────────▼───────────────────────────┐
-│              FastMCP Server (server.py)            │
+│       FastMCP Server (mcp_server/ · server.py)     │
 │  ┌─────────────────────────────────────────────┐  │
 │  │              Tool Layer                       │  │
 │  │  zgh_search_docs  zgh_search_graph           │  │
@@ -354,7 +354,15 @@ Once the index is built, `zgh_search_graph`:
 
 ```
 ainote-mcp-server/
-├── server.py                 # FastMCP entry point
+├── server.py                 # FastMCP entry point (thin bootstrap)
+├── mcp_server/               # MCP application layer (sibling of rag_kb)
+│   ├── __init__.py           # Re-exports mcp, registers tool modules
+│   ├── instance.py           # FastMCP instance + lifespan
+│   ├── runtime.py            # Retriever singleton, background init
+│   └── tools/                # MCP tool definitions
+│       ├── search.py         # zgh_search_docs, zgh_get_document, etc.
+│       ├── index.py          # zgh_refresh_index, zgh_get_doc_stats
+│       └── graphrag_tools.py # zgh_search_graph, etc.
 ├── pyproject.toml            # Project config & dependencies
 ├── Dockerfile                # Container build
 ├── .env                      # Local configuration (gitignored)
@@ -371,14 +379,8 @@ ainote-mcp-server/
 │   ├── qdrant_store.py       # Qdrant backend with hybrid search + RRF
 │   ├── graphrag_search.py    # GraphRAG knowledge graph queries
 │   ├── graphrag_indexer.py   # GraphRAG indexing pipeline
-│   ├── graphrag_patch.py     # Monkey-patch for non-OpenAI LLM compatibility
 │   ├── vector_store_factory.py  # Backend factory
-│   ├── watcher.py            # File system watcher
-│   └── tools/                # MCP tool definitions
-│       ├── __init__.py       # FastMCP instance, lifespan
-│       ├── search.py         # zgh_search_docs, etc.
-│       ├── index.py          # zgh_refresh_index, etc.
-│       └── graphrag_tools.py # zgh_search_graph, etc.
+│   └── watcher.py            # File system watcher
 │
 ├── knowledge_base/
 │   ├── documents/            # Drop your .docx / .md files here
@@ -413,7 +415,7 @@ This project was built as a learning resource. Here's how to explore it:
 
 | Step | File(s) | What You'll Learn |
 |------|---------|-------------------|
-| 1️⃣ | `server.py`, `rag_kb/tools/__init__.py` | How to set up a FastMCP server with lifespan |
+| 1️⃣ | `server.py`, `mcp_server/instance.py` | How to set up a FastMCP server with lifespan |
 | 2️⃣ | `rag_kb/embeddings.py` | Abstracting embedding providers behind a common interface |
 | 3️⃣ | `rag_kb/interfaces.py` | Vector store interface design (backend-agnostic) |
 | 4️⃣ | `rag_kb/qdrant_store.py` | **Hybrid search**: dense + sparse vectors with RRF fusion |

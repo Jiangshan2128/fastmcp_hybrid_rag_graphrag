@@ -13,11 +13,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from rag_kb.tools import (
+from mcp_server.instance import mcp
+from mcp_server.runtime import (
     RETRIEVER_NOT_READY,
     RetrieverNotReadyError,
     get_retriever,
-    mcp,
 )
 
 logger = logging.getLogger(__name__)
