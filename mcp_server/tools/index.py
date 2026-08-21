@@ -25,13 +25,15 @@ def zgh_refresh_index(full_rebuild: bool = False) -> str:
     """Re-index all documents in the 智冠华 internal document library.
 
     Normally, only new or changed files are re-indexed (content-hash cache).
-    Use ``full_rebuild=true`` to rebuild every document from scratch.
+    Use ``full_rebuild=true`` to wipe existing data and rebuild every document
+    from scratch (avoids duplicate chunks on repeated rebuilds).
 
     Call this after dropping new DOCX or Markdown files into the documents
     directory.
 
     Args:
-        full_rebuild: If true, re-index everything (ignores cache).
+        full_rebuild: If true, clear the store, then re-index everything
+            (ignores cache).
 
     Returns:
         Summary of what was indexed.

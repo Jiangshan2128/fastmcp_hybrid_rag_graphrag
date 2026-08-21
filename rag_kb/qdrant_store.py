@@ -189,6 +189,26 @@ class QdrantStore(VectorStoreInterface):
         )
         return len(ids_to_delete)
 
+    def delete_all(self) -> int:
+        """Remove every point from the collection (full reset)."""
+        info = self._client.get_collection(self._collection_name)
+        total = info.points_count or 0
+        if total:
+            # An empty filter matches all points — deletes them in one shot.
+            self._client.delete(
+                collection_name=self._collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(must=[]),
+                ),
+            )
+            logger.info(
+                "Cleared %d point(s) from collection '%s'",
+                total, self._collection_name,
+            )
+        else:
+            logger.info("Collection '%s' already empty", self._collection_name)
+        return total
+
     # ── Retrieval ────────────────────────────────────────────────────
 
     def similarity_search(self, query: str, k: int = 5) -> list[SearchResult]:

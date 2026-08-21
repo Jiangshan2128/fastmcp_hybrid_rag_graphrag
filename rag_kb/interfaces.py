@@ -123,6 +123,18 @@ class VectorStoreInterface(ABC):
         """
         ...
 
+    @abstractmethod
+    def delete_all(self) -> int:
+        """Remove every chunk from the store.
+
+        Used by a full rebuild so re-indexing *replaces* old data instead of
+        appending duplicates on top of it.
+
+        Returns:
+            Number of points deleted.
+        """
+        ...
+
     # ── Retrieval ────────────────────────────────────────────────────
 
     @abstractmethod

@@ -2,7 +2,7 @@
 import pandas as pd
 from pathlib import Path
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parents[1]  # helper/ → graphrag/
 df = pd.read_parquet(ROOT / "output" / "community_reports.parquet")
 out_path = ROOT / "output" / "community_reports_export.txt"
 
