@@ -135,7 +135,7 @@ async def zgh_refresh_graphrag_index(
 
     Args:
         method: Indexing method — ``"standard"`` (LLM-based, higher quality)
-            or ``"nlp"`` (faster, rule-based). Default: standard.
+            or ``"fast"`` (NLP graph construction, rule-based). Default: standard.
         incremental: If true, run an incremental update instead of full
             rebuild. Only new/changed documents are processed.
         skip_preprocess: Skip DOCX preprocessing (e.g. if input files

@@ -292,7 +292,7 @@ zgh_refresh_graphrag_index(method="standard")
 ```
 
 - `method="standard"` — LLM-based extraction (higher quality, takes longer)
-- `method="nlp"` — Rule-based extraction (faster, good for initial experimentation)
+- `method="fast"` — NLP rule-based extraction (faster, good for initial experimentation)
 - `incremental=true` — Only process new/changed documents
 
 Check status at any time:
@@ -347,7 +347,7 @@ Once the index is built, `zgh_search_graph`:
 |-------|----------|
 | Index fails with `json_schema` error | The project includes `rag_kb/graphrag_patch.py` which monkey-patches GraphRAG's community report extractor to skip `strict: true` JSON schema mode (incompatible with DeepSeek) |
 | Empty search results | Run `zgh_get_graphrag_index_status()` first to verify the index is built |
-| Slow indexing | Use `method="nlp"` for faster but less accurate extraction, or reduce document count |
+| Slow indexing | Use `method="fast"` for faster but less accurate extraction, or reduce document count |
 | Out of memory | Reduce `CHUNK_SIZE` in `.env` or increase `max_gleanings: 0` in `settings.yaml` |
 
 ## 📁 Project Structure

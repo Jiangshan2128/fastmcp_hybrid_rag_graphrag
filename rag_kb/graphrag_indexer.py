@@ -118,7 +118,8 @@ async def build_index(
 
     Args:
         verbose: Enable verbose logging.
-        method: Indexing method — ``"standard"`` (LLM-based) or ``"nlp"``.
+        method: Indexing method — ``"standard"`` (LLM-based) or ``"fast"``
+            (NLP graph construction + LLM summarization).
         is_update_run: Incremental update instead of full rebuild.
         skip_preprocess: Skip the preprocessing step.
 
@@ -130,8 +131,20 @@ async def build_index(
     if not skip_preprocess:
         preprocess()
 
+    # Apply the community-report compatibility patch BEFORE the pipeline
+    # starts. Without it, create_community_reports sends response_format
+    # with a Pydantic model → litellm converts to {type: json_schema,
+    # strict: true}, which DeepSeek/GLM and most non-OpenAI models reject.
+    # The patch drops response_format and parses plain JSON instead.
+    from rag_kb.graphrag_patch import patch_community_reports
+    patched = patch_community_reports()
+    logger.info(
+        "CommunityReportsExtractor patch %s",
+        "applied (plain JSON mode)" if patched else "NOT applied",
+    )
+
     from graphrag.api import build_index as _graphrag_build_index
-    from graphrag.config import load_config
+    from graphrag.config.load_config import load_config
 
     config = load_config(root_dir=root)
 

@@ -112,7 +112,8 @@ def index_documents(
     Args:
         store: The vector store backend.
         config: RAG configuration.
-        full_rebuild: If True, re-index every file (ignore cache).
+        full_rebuild: If True, wipe the store, then re-index every file
+            (ignore cache).
 
     Returns:
         An ``IndexResult`` with a summary of what happened.
@@ -124,6 +125,20 @@ def index_documents(
         logger.info("Documents directory does not exist, creating: %s", doc_dir)
         doc_dir.mkdir(parents=True, exist_ok=True)
         return result
+
+    # Full rebuild: wipe the store FIRST so re-indexing replaces old chunks
+    # instead of appending a second copy of every point (uuid4 IDs are fresh
+    # each run — without this, repeated full rebuilds duplicate all content).
+    if full_rebuild:
+        try:
+            cleared = store.delete_all()
+            logger.info(
+                "Full rebuild: cleared %d existing point(s) from the store",
+                cleared,
+            )
+        except Exception as e:
+            logger.warning("Failed to clear store before full rebuild: %s", e)
+            result.errors.append(f"clear store: {e}")
 
     # Collect current files and load cache
     current_files = _collect_documents(doc_dir)

@@ -35,7 +35,7 @@ async def _lifespan(server: FastMCP) -> AsyncIterator[None]:
 
 
 mcp = FastMCP(
-    "智冠华 Internal Knowledge Base",
+    "zgh Internal Knowledge Base",
     lifespan=_lifespan,
     instructions=(
         "## 适用场景\n"
